@@ -79,6 +79,11 @@ select.stamp:focus{outline:2px solid currentColor;}
 .grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px;}
 .card{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:18px; position:relative; overflow:hidden; transition:.15s; display:flex; flex-direction:column; gap:10px;}
 .card:hover{border-color:var(--accent); transform:translateY(-2px);}
+.card-check{position:absolute; top:12px; right:12px; z-index:5; cursor:pointer;}
+.card-check input{width:18px; height:18px; accent-color:var(--accent); cursor:pointer;}
+.bulk-bar{display:none; align-items:center; gap:12px; background:var(--surface2); border:1px solid var(--accent); border-radius:10px; padding:10px 16px; margin-bottom:16px; flex-wrap:wrap;}
+.bulk-bar span{font-size:13.5px; font-weight:700; color:var(--accent);}
+.bulk-bar select{background:var(--bg); border:1px solid var(--line); color:var(--text); padding:7px 10px; border-radius:7px; font-size:13px;}
 .card .top{display:flex; justify-content:space-between; align-items:flex-start; gap:8px;}
 .card h3{margin:0; font-size:17px; font-weight:800; line-height:1.3;}
 .stamp{font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700; letter-spacing:1px; padding:4px 9px; border-radius:20px; white-space:nowrap; text-transform:uppercase; transform:rotate(-2deg); border:1px solid currentColor;}
@@ -163,12 +168,24 @@ td[contenteditable=true]:focus{background:var(--accent-soft);}
       <option value="已結案">已結案</option>
       <option value="已取消">已取消</option>
     </select>
+    <select id="clientFilter"><option value="">全部客戶</option></select>
+    <select id="yearFilter"><option value="">全部年份</option></select>
+    <select id="monthFilter"><option value="">全部月份</option></select>
+  </div>
+
+  <div class="bulk-bar" id="bulkBar" style="display:none;">
+    <span id="bulkCount"></span>
+    <select id="bulkStatusSelect"></select>
+    <button class="btn" id="bulkApplyStatus">套用狀態</button>
+    <button class="btn btn-ghost" id="bulkDeleteBtn">刪除所選</button>
+    <button class="btn btn-ghost" id="bulkClear">取消選取</button>
   </div>
 
   <div class="grid" id="grid"></div>
   <div class="list-wrap" id="listWrap" style="display:none;">
     <table>
       <thead><tr>
+        <th style="width:34px;"><input type="checkbox" id="selectAllList"></th>
         <th>商演名稱</th><th>狀態</th><th>演出地點</th><th>活動日期</th><th>預留日期</th><th>客戶</th><th>人數</th><th>演出舞者</th><th>演出服裝樣式</th><th></th>
       </tr></thead>
       <tbody id="listBody"></tbody>
@@ -220,6 +237,7 @@ td[contenteditable=true]:focus{background:var(--accent-soft);}
 <script>
 const STORAGE_KEY = 'flyingspace-projects';
 let projects = [];
+let selectedIds = new Set();
 
 function uid(){ return 'p_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
 
@@ -275,11 +293,36 @@ function statusClass(s){
 
 let currentView = 'cards';
 
+function populateFilterOptions(){
+  const clientSel = document.getElementById('clientFilter');
+  const yearSel = document.getElementById('yearFilter');
+  const monthSel = document.getElementById('monthFilter');
+  const curClient = clientSel.value, curYear = yearSel.value, curMonth = monthSel.value;
+
+  const clients = [...new Set(projects.map(p=>p.client).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+  const years = [...new Set(projects.map(p=>p.performDate).filter(Boolean).map(d=>d.slice(0,4)))].sort();
+  const months = [...new Set(projects.map(p=>p.performDate).filter(Boolean).map(d=>d.slice(5,7)))].sort();
+
+  clientSel.innerHTML = '<option value="">全部客戶</option>' + clients.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  yearSel.innerHTML = '<option value="">全部年份</option>' + years.map(y=>`<option value="${y}">${y}年</option>`).join('');
+  monthSel.innerHTML = '<option value="">全部月份</option>' + months.map(m=>`<option value="${m}">${parseInt(m,10)}月</option>`).join('');
+
+  if(clients.includes(curClient)) clientSel.value = curClient;
+  if(years.includes(curYear)) yearSel.value = curYear;
+  if(months.includes(curMonth)) monthSel.value = curMonth;
+}
+
 function getFilteredList(){
   const q = document.getElementById('searchBox').value.trim().toLowerCase();
   const sf = document.getElementById('statusFilter').value;
+  const cf = document.getElementById('clientFilter').value;
+  const yf = document.getElementById('yearFilter').value;
+  const mf = document.getElementById('monthFilter').value;
   let list = projects.filter(p=>{
     if(sf && p.status !== sf) return false;
+    if(cf && p.client !== cf) return false;
+    if(yf && (!p.performDate || p.performDate.slice(0,4) !== yf)) return false;
+    if(mf && (!p.performDate || p.performDate.slice(5,7) !== mf)) return false;
     if(!q) return true;
     const hay = [p.title,p.client,p.location, (p.dancers||[]).map(d=>d.performing+d.original).join(' ')].join(' ').toLowerCase();
     return hay.includes(q);
@@ -289,6 +332,10 @@ function getFilteredList(){
 }
 
 function render(){
+  const validIds = new Set(projects.map(p=>p.id));
+  [...selectedIds].forEach(id=>{ if(!validIds.has(id)) selectedIds.delete(id); });
+  updateBulkBar();
+  populateFilterOptions();
   const list = getFilteredList();
   document.getElementById('grid').style.display = currentView==='cards' ? 'grid' : 'none';
   document.getElementById('listWrap').style.display = currentView==='list' ? 'block' : 'none';
@@ -305,6 +352,7 @@ function renderCards(list){
     const dCount = (p.dancers||[]).length;
     const sCount = (p.setlist||[]).length;
     return `<div class="card" data-id="${p.id}">
+      <label class="card-check"><input type="checkbox" data-check="${p.id}" ${selectedIds.has(p.id)?'checked':''}></label>
       <div class="top">
         <h3>${esc(p.title||'未命名商案')}</h3>
         <span class="stamp ${statusClass(p.status)}">${esc(p.status||'籌備中')}</span>
@@ -319,14 +367,23 @@ function renderCards(list){
   }).join('');
 
   grid.querySelectorAll('.card').forEach(c=>{
-    c.addEventListener('click', ()=> openDetail(c.dataset.id));
+    c.addEventListener('click', (e)=>{
+      if(e.target.closest('.card-check')) return;
+      openDetail(c.dataset.id);
+    });
+  });
+  grid.querySelectorAll('[data-check]').forEach(cb=>{
+    cb.addEventListener('click', e=>e.stopPropagation());
+    cb.addEventListener('change', ()=>{
+      toggleSelect(cb.dataset.check, cb.checked);
+    });
   });
 }
 
 function renderList(list){
   const body = document.getElementById('listBody');
   if(list.length===0){
-    body.innerHTML = `<tr><td colspan="10"><div class="list-empty"><b>目前沒有商案資料</b>貼上備忘錄或手動新增，開始建立你的商案總覽。</div></td></tr>`;
+    body.innerHTML = `<tr><td colspan="11"><div class="list-empty"><b>目前沒有商案資料</b>貼上備忘錄或手動新增，開始建立你的商案總覽。</div></td></tr>`;
     return;
   }
   const statuses = STATUS_LIST;
@@ -334,6 +391,7 @@ function renderList(list){
     const dCount = (p.dancers||[]).length;
     const dancerNames = (p.dancers||[]).map(d=>d.performing||d.original).filter(Boolean).join('、');
     return `<tr data-id="${p.id}">
+      <td><input type="checkbox" data-check="${p.id}" ${selectedIds.has(p.id)?'checked':''}></td>
       <td class="title-col" contenteditable="true" data-f="title">${esc(p.title)}</td>
       <td><select class="stamp ${statusClass(p.status)}" data-f="status">${statuses.map(s=>`<option value="${s}" ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></td>
       <td contenteditable="true" data-f="location">${esc(p.location)}</td>
@@ -347,6 +405,9 @@ function renderList(list){
     </tr>`;
   }).join('');
 
+  body.querySelectorAll('[data-check]').forEach(cb=>{
+    cb.addEventListener('change', ()=> toggleSelect(cb.dataset.check, cb.checked));
+  });
   body.querySelectorAll('td[contenteditable]').forEach(td=>{
     td.addEventListener('blur', ()=>{
       const id = td.closest('tr').dataset.id;
@@ -365,6 +426,79 @@ function renderList(list){
     btn.addEventListener('click', ()=> openDetail(btn.dataset.open));
   });
 }
+
+function toggleSelect(id, checked){
+  if(checked) selectedIds.add(id); else selectedIds.delete(id);
+  updateBulkBar();
+  // 同步同一個id在另一個視圖(卡片/列表)裡的checkbox狀態，不必整個render重繪
+  document.querySelectorAll(`[data-check="${id}"]`).forEach(cb=> cb.checked = checked);
+  const selectAllList = document.getElementById('selectAllList');
+  if(selectAllList){
+    const boxes = document.querySelectorAll('#listBody [data-check]');
+    selectAllList.checked = boxes.length>0 && [...boxes].every(b=>b.checked);
+  }
+}
+
+function updateBulkBar(){
+  const bar = document.getElementById('bulkBar');
+  const count = selectedIds.size;
+  bar.style.display = count>0 ? 'flex' : 'none';
+  document.getElementById('bulkCount').textContent = `已選擇 ${count} 筆`;
+}
+
+function clearSelection(){
+  selectedIds.clear();
+  updateBulkBar();
+  render();
+}
+
+document.getElementById('bulkStatusSelect').innerHTML = STATUS_LIST.map(s=>`<option value="${s}">${s}</option>`).join('');
+
+document.getElementById('bulkApplyStatus').addEventListener('click', ()=>{
+  const status = document.getElementById('bulkStatusSelect').value;
+  projects.forEach(p=>{ if(selectedIds.has(p.id)) p.status = status; });
+  saveProjects();
+  render();
+});
+
+document.getElementById('bulkClear').addEventListener('click', clearSelection);
+
+const bulkDelBtn = document.getElementById('bulkDeleteBtn');
+let bulkDelArmed = false, bulkDelTimer = null;
+bulkDelBtn.addEventListener('click', ()=>{
+  if(!bulkDelArmed){
+    bulkDelArmed = true;
+    bulkDelBtn.textContent = '再按一次確認刪除';
+    bulkDelBtn.style.color = 'var(--danger)';
+    bulkDelBtn.style.borderColor = 'var(--danger)';
+    bulkDelTimer = setTimeout(()=>{
+      bulkDelArmed = false;
+      bulkDelBtn.textContent = '刪除所選';
+      bulkDelBtn.style.color = '';
+      bulkDelBtn.style.borderColor = '';
+    }, 4000);
+    return;
+  }
+  clearTimeout(bulkDelTimer);
+  bulkDelArmed = false;
+  bulkDelBtn.textContent = '刪除所選';
+  bulkDelBtn.style.color = '';
+  bulkDelBtn.style.borderColor = '';
+  projects = projects.filter(p=>!selectedIds.has(p.id));
+  selectedIds.clear();
+  saveProjects();
+  updateBulkBar();
+  render();
+});
+
+document.getElementById('selectAllList').addEventListener('change', (e)=>{
+  const boxes = document.querySelectorAll('#listBody [data-check]');
+  boxes.forEach(cb=>{
+    cb.checked = e.target.checked;
+    if(e.target.checked) selectedIds.add(cb.dataset.check); else selectedIds.delete(cb.dataset.check);
+  });
+  updateBulkBar();
+});
 
 document.getElementById('viewCardsBtn').addEventListener('click', ()=>{
   currentView='cards';
@@ -816,6 +950,9 @@ document.getElementById('btnDoExport').addEventListener('click', ()=>{
 
 document.getElementById('searchBox').addEventListener('input', render);
 document.getElementById('statusFilter').addEventListener('change', render);
+document.getElementById('clientFilter').addEventListener('change', render);
+document.getElementById('yearFilter').addEventListener('change', render);
+document.getElementById('monthFilter').addEventListener('change', render);
 
 loadProjects();
 </script>
