@@ -244,7 +244,7 @@ function uid(){ return 'p_' + Date.now() + '_' + Math.random().toString(36).slic
 function blankProject(){
   return {
     id: uid(), title:'新商案', client:'', performDate:'', location:'', status:'籌備中', travelNote:'', costumeStyle:'',
-    leadChoreo:[], dancers:[], costumes:[], rehearsals:[], setlist:[], flights:[]
+    leadChoreo:[], dancers:[], costumes:[], rehearsals:[], setlist:[], flights:[], advances:[]
   };
 }
 
@@ -546,6 +546,7 @@ function detailHTML(p){
   </div>
 
   ${section('flights','去程／回程班機', ['類型','日期','航班編號','出發地','出發時間','抵達地','抵達時間','人員','備註'], ['type','date','flightNo','from','depTime','to','arrTime','person','note'], p.flights)}
+  ${section('advances','代墊', ['項目','金額','墊付人','日期','備註'], ['item','amount','payer','date','note'], p.advances)}
   ${section('leadChoreo','帶隊編舞', ['人員','帶隊/編舞','時數','費用','備註'], ['person','role','hours','fee','note'], p.leadChoreo)}
   ${section('dancers','舞者名單', ['原始舞者','演出舞者','舞者費用','確認接演狀態','備註'], ['original','performing','fee','confirmStatus','note'], p.dancers)}
   ${section('costumes','演出服裝', ['舞者','品項','尺寸','數量','取得方式','服飾狀態','歸還日期','備註'], ['dancer','item','size','qty','method','status','returnDate','note'], p.costumes)}
@@ -609,7 +610,8 @@ function bindDetailEvents(p){
         costumes:['dancer','item','size','qty','method','status','returnDate','note'],
         rehearsals:['activity','date','start','end','place','hours','fee','present','absent','status','note'],
         setlist:['order','song','duration','note'],
-        flights:['type','date','flightNo','from','depTime','to','arrTime','person','note']
+        flights:['type','date','flightNo','from','depTime','to','arrTime','person','note'],
+        advances:['item','amount','payer','date','note']
       };
       const blank = {}; fieldsMap[key].forEach(f=>blank[f]='');
       p[key].push(blank);
@@ -650,7 +652,8 @@ function refreshSection(sec, key, p){
     costumes:['舞者','品項','尺寸','數量','取得方式','服飾狀態','歸還日期','備註'],
     rehearsals:['活動項目','日期','開始','結束','地點/教室','時數','費用','需到場舞者','缺席人員','狀態','備註'],
     setlist:['順序','歌曲名稱','時長','備註'],
-    flights:['類型','日期','航班編號','出發地','出發時間','抵達地','抵達時間','人員','備註']
+    flights:['類型','日期','航班編號','出發地','出發時間','抵達地','抵達時間','人員','備註'],
+    advances:['項目','金額','墊付人','日期','備註']
   };
   const fieldKeyMap = {
     leadChoreo:['person','role','hours','fee','note'],
@@ -658,7 +661,8 @@ function refreshSection(sec, key, p){
     costumes:['dancer','item','size','qty','method','status','returnDate','note'],
     rehearsals:['activity','date','start','end','place','hours','fee','present','absent','status','note'],
     setlist:['order','song','duration','note'],
-    flights:['type','date','flightNo','from','depTime','to','arrTime','person','note']
+    flights:['type','date','flightNo','from','depTime','to','arrTime','person','note'],
+    advances:['item','amount','payer','date','note']
   };
   const html = section(key, sec.querySelector('.sec-title').textContent, fieldsMap[key], fieldKeyMap[key], p[key]);
   const wrap = document.createElement('div'); wrap.innerHTML = html;
@@ -747,7 +751,7 @@ function parseMemoBlockLocal(text){
 
   let mode = null;
   for(; idx<lines.length; idx++){
-    const line = lines[idx];
+    let line = lines[idx];
 
     if(/^舞者[:：]/.test(line)){
       p.dancers = splitDancerList(line.replace(/^舞者[:：]/,''));
@@ -755,7 +759,26 @@ function parseMemoBlockLocal(text){
       continue;
     }
     if(/^(演出)?曲目[:：]?\s*$/.test(line)){ mode='setlist'; continue; }
-    if(/^排練(日期|時間)[:：]?\s*$/.test(line)){ continue; }
+    const rehHeading = line.match(/^排練(?:日期|時間)[:：]?\s*(.*)$/);
+    if(rehHeading){
+      if(!rehHeading[1] || rehHeading[1]==='無'){ continue; }
+      line = rehHeading[1]; // 剝掉「排練日期：」前綴，剩下內容繼續往下當排練時間解析
+    }
+    const advanceMatch = line.match(/^代墊[:：]\s*(.+)$/);
+    if(advanceMatch){
+      let content = advanceMatch[1];
+      const amountMatch = content.match(/[\d,]+(?:\.\d+)?/);
+      const amount = amountMatch ? amountMatch[0] : '';
+      let payer = '';
+      const payerMatch = content.match(/([^\s\d，,。]{2,4})(?:代墊|墊付|墊|付)\s*$/);
+      if(payerMatch){
+        payer = normalizeName(payerMatch[1]);
+        content = content.slice(0, content.length - payerMatch[0].length).trim();
+      }
+      if(amountMatch){ content = content.replace(amountMatch[0],'').trim(); }
+      p.advances.push({item:content, amount, payer, date:'', note:''});
+      continue;
+    }
     const songMatch = line.match(/^(\d+)[.\uFF0E、]\s*(.+)$/);
     if(songMatch){
       let content = songMatch[2];
@@ -898,6 +921,7 @@ function buildDetailSheet(p){
     aoa.push([]);
   }
   section('去程／回程班機', ['類型','日期','航班編號','出發地','出發時間','抵達地','抵達時間','人員','備註'], ['type','date','flightNo','from','depTime','to','arrTime','person','note'], p.flights);
+  section('代墊', ['項目','金額','墊付人','日期','備註'], ['item','amount','payer','date','note'], p.advances);
   section('帶隊編舞', ['人員','帶隊/編舞','時數','費用','備註'], ['person','role','hours','fee','note'], p.leadChoreo);
   section('舞者名單', ['原始舞者','演出舞者','舞者費用','確認接演狀態','備註'], ['original','performing','fee','confirmStatus','note'], p.dancers);
   section('演出服裝', ['舞者','品項','尺寸','數量','取得方式','服飾狀態','歸還日期','備註'], ['dancer','item','size','qty','method','status','returnDate','note'], p.costumes);
