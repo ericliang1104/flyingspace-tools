@@ -766,17 +766,17 @@ function parseMemoBlockLocal(text){
     }
     const advanceMatch = line.match(/^代墊[:：]\s*(.+)$/);
     if(advanceMatch){
-      let content = advanceMatch[1];
-      const amountMatch = content.match(/[\d,]+(?:\.\d+)?/);
-      const amount = amountMatch ? amountMatch[0] : '';
+      let content = advanceMatch[1].trim();
+      const amountMatch = content.match(/([\d,]+(?:\.\d+)?)\s*元/);
+      const amount = amountMatch ? amountMatch[1] : '';
       let payer = '';
-      const payerMatch = content.match(/([^\s\d，,。]{2,4})(?:代墊|墊付|墊|付)\s*$/);
-      if(payerMatch){
-        payer = normalizeName(payerMatch[1]);
-        content = content.slice(0, content.length - payerMatch[0].length).trim();
-      }
-      if(amountMatch){ content = content.replace(amountMatch[0],'').trim(); }
-      p.advances.push({item:content, amount, payer, date:'', note:''});
+      const payerMatch = content.match(/([^\s()（）,，。]{1,6}?)(?:已付款|已墊付|已代墊|墊付|代墊|墊|付款|付)/);
+      if(payerMatch){ payer = normalizeName(payerMatch[1]); }
+      const noteParts = [];
+      content = content.replace(/[\(（]([^)）]+)[\)）]/g, (m, inner)=>{ noteParts.push(inner.trim()); return ' '; });
+      if(amountMatch){ content = content.replace(amountMatch[0],' '); }
+      content = content.replace(/\s+/g,' ').trim();
+      p.advances.push({item:content, amount, payer, date:'', note:noteParts.join('；')});
       continue;
     }
     const songMatch = line.match(/^(\d+)[.\uFF0E、]\s*(.+)$/);
@@ -804,8 +804,10 @@ function parseMemoBlockLocal(text){
       p.leadChoreo.push({person, role:content, hours:'', fee:'', note:''});
       continue;
     }
-    const timeMatch = line.match(/(\d{1,2}:\d{2})\s*[-~]\s*(\d{1,2}:\d{2})/);
+    const timeMatch = line.match(/(\d{1,2}):?(\d{2})\s*[-~]\s*(\d{1,2}):?(\d{2})/);
     if(timeMatch){
+      const startStr = `${timeMatch[1].padStart(2,'0')}:${timeMatch[2]}`;
+      const endStr = `${timeMatch[3].padStart(2,'0')}:${timeMatch[4]}`;
       let date='';
       const dmm = line.match(/(\d{1,2})[\/月](\d{1,2})/);
       if(dmm){ date = `2026-${dmm[1].padStart(2,'0')}-${dmm[2].padStart(2,'0')}`; }
@@ -819,6 +821,8 @@ function parseMemoBlockLocal(text){
       if(/全到|全員到齊|全員/.test(rest)){ present='全員'; rest = rest.replace(/全到|全員到齊|全員/,'').trim(); }
       const trailNote = rest.match(/[\(（]([^)）]+)[\)）]\s*$/);
       if(trailNote){ note = trailNote[1].trim(); rest = rest.replace(trailNote[0],'').trim(); }
+      // 純粹的時數說明(如 1.5hr／2hr)不是地點，直接清掉，時數會自動用開始結束時間算
+      if(/^\d+(\.\d+)?\s*(hr|hrs|小時)$/i.test(rest)){ rest = ''; }
 
       // 從尾端擷取含英數字的「地點/教室」token，其餘視為活動項目
       const tokens = rest.split(/\s+/).filter(Boolean);
@@ -829,13 +833,13 @@ function parseMemoBlockLocal(text){
       const place = placeTokens.join(' ');
       const activity = tokens.join(' ');
 
-      const [sh,sm] = timeMatch[1].split(':').map(Number);
-      const [eh,em] = timeMatch[2].split(':').map(Number);
+      const [sh,sm] = startStr.split(':').map(Number);
+      const [eh,em] = endStr.split(':').map(Number);
       let diff = (eh*60+em) - (sh*60+sm);
       if(diff<=0) diff += 24*60;
       const hours = (Math.round(diff/60*10)/10).toString();
 
-      p.rehearsals.push({activity, date, start:timeMatch[1], end:timeMatch[2], place, hours, fee:'', present, absent, status:'已排定', note});
+      p.rehearsals.push({activity, date, start:startStr, end:endStr, place, hours, fee:'', present, absent, status:'已排定', note});
       continue;
     }
     const flightMatch = line.match(/^(.*?)(?:從|由)\s*([^\s]+?)\s*(?:飛|搭機到|搭機至|飛往)\s*([^\s，,。]+)/);
@@ -847,6 +851,12 @@ function parseMemoBlockLocal(text){
       personPart = personPart.replace(/^日?[:：,，]?\s*/,'').trim();
       const person = personPart.split(/[、,，]/).map(s=>normalizeName(s.trim())).filter(Boolean).join('、');
       p.flights.push({type:'去程', date, flightNo:'', from:flightMatch[2].trim(), depTime:'', to:flightMatch[3].trim(), arrTime:'', person, note:''});
+      continue;
+    }
+    const unavailMatch = line.match(/^不行[:：]\s*(.+)$/);
+    if(unavailMatch){
+      const names = unavailMatch[1].split(/[、,，]/).map(s=>normalizeName(s.trim())).filter(Boolean).join('、');
+      p.travelNote = p.travelNote ? (p.travelNote + '｜不行：' + names) : ('不行：' + names);
       continue;
     }
     // 無法歸類的行，附加在行程備註後面，避免資料遺失
