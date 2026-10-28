@@ -134,9 +134,27 @@ td[contenteditable=true]:focus{background:var(--accent-soft);}
 .rm-btn{color:var(--danger); background:none; border:none; font-size:16px; padding:0 4px;}
 .rm-btn:hover{opacity:0.7;}
 @media(max-width:640px){.top-fields{grid-template-columns:repeat(2,1fr);} table, th, td{font-size:12px;}}
+
+/* login / lock */
+body.locked .wrap{display:none;}
+#loginScreen{position:fixed; inset:0; z-index:300; background:var(--bg); display:flex; align-items:center; justify-content:center; padding:24px;}
+.login-card{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:36px 32px; max-width:380px; width:100%; text-align:center;}
+.login-card h1{font-family:'Archivo Black',sans-serif; font-size:26px; margin:0 0 6px; text-transform:uppercase;}
+.login-card h1 span{color:var(--accent);}
+.login-card .sub{color:var(--dim); font-size:12px; font-family:'JetBrains Mono',monospace; letter-spacing:1px; margin-bottom:22px;}
+#loginMsg{color:var(--dim); font-size:13.5px; line-height:1.6; margin:0 0 18px; min-height:20px;}
+.set-title{font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent); margin:20px 0 8px; font-weight:700;}
 </style>
 </head>
-<body>
+<body class="locked">
+<div id="loginScreen">
+  <div class="login-card">
+    <h1>FLYING<span>SPACE</span></h1>
+    <div class="sub">商案控制台 · Project Console</div>
+    <p id="loginMsg">連線中…</p>
+    <button class="btn btn-primary" id="btnLogin" style="display:none;">使用 Google 登入</button>
+  </div>
+</div>
 <div class="wrap">
   <header>
     <div class="brand">
@@ -144,6 +162,7 @@ td[contenteditable=true]:focus{background:var(--accent-soft);}
       <div class="sub">商案控制台 · Project Console</div>
     </div>
     <div class="headbtns">
+      <button class="btn" id="btnSync">⚙️ 設定／備份</button>
       <button class="btn" id="btnExport">📊 匯出 Excel</button>
       <button class="btn" id="btnQuick">✨ 貼上備忘錄快速解析</button>
       <button class="btn btn-primary" id="btnNew">+ 手動新增商案</button>
@@ -215,6 +234,35 @@ td[contenteditable=true]:focus{background:var(--accent-soft);}
   <div class="panel" id="detailPanel"></div>
 </div>
 
+<!-- Settings overlay -->
+<div class="overlay" id="syncOverlay">
+  <div class="panel" style="max-width:520px;">
+    <div class="panel-head">
+      <h2>⚙️ 設定／備份</h2>
+      <button class="close" data-close="syncOverlay">×</button>
+    </div>
+
+    <div class="set-title">帳號</div>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+      <span style="font-size:13.5px; color:var(--dim);">已登入：<b id="accountEmail" style="color:var(--text);"></b></span>
+      <button class="btn btn-ghost" id="btnLogout">登出</button>
+    </div>
+
+    <div class="set-title">暱稱對照</div>
+    <div class="hint" style="margin-top:0;">一行一組，格式「暱稱=正式姓名」，貼備忘錄解析時會自動把暱稱換成正式姓名。資料存在你的雲端帳號，不會出現在公開網頁程式碼裡。</div>
+    <textarea id="nickBox" style="min-height:110px;" placeholder="美艷=周映孜&#10;貝拉=謝雨彤"></textarea>
+    <div class="actions" style="margin-top:10px;"><button class="btn btn-primary" id="btnSaveNick">儲存暱稱對照</button></div>
+
+    <div class="set-title">備份</div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <button class="btn" id="btnDownloadData">⬇️ 下載備份檔（data.json）</button>
+      <button class="btn" id="btnImportFile">📂 從備份檔匯入（會取代雲端全部商案）</button>
+      <input type="file" id="importFileInput" accept=".json,application/json" style="display:none;">
+    </div>
+    <div class="status-line" id="syncStatus"></div>
+  </div>
+</div>
+
 <!-- Export overlay -->
 <div class="overlay" id="exportOverlay">
   <div class="panel" style="max-width:440px;">
@@ -234,7 +282,18 @@ td[contenteditable=true]:focus{background:var(--accent-soft);}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>
+<script type="module">
+// ===== Firebase 設定：建好專案後，把 firebaseConfig 的內容填在這裡 =====
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDXE7ax-S-wMeiXhUxAZgqxKO9FuxuuRAU",
+  authDomain: "mt-cpdms.firebaseapp.com",
+  projectId: "mt-cpdms",
+  storageBucket: "mt-cpdms.firebasestorage.app",
+  messagingSenderId: "202932725899",
+  appId: "1:202932725899:web:ddc1414e510c17d6d4cc8e",
+  measurementId: "G-30B4ND5KNM"
+};
+// =====================================================================
 const STORAGE_KEY = 'flyingspace-projects';
 let projects = [];
 let selectedIds = new Set();
@@ -248,35 +307,182 @@ function blankProject(){
   };
 }
 
-async function loadProjects(){
-  try{
-    const raw = localStorage.getItem(STORAGE_KEY);
-    projects = raw ? JSON.parse(raw) : [];
-  }catch(e){
-    console.error('讀取失敗', e);
-    projects = [];
-  }
-  render();
+function normalizeProjects(arr){
+  return (Array.isArray(arr)?arr:[]).map(p=>Object.assign(blankProject(), p));
 }
+
+/* ---------- Cloud (Firebase) ---------- */
+const MIGRATED_KEY = 'flyingspace-migrated';
+let fbApi = null, db = null, auth = null, cloudUser = null;
+let unsubProjects = null, unsubSettings = null;
+let lastSynced = new Map();   // id -> 已同步的JSON字串，用來只寫入有變動的商案
+let remoteQueue = [];         // 其他裝置傳來、等待套用的變更
+let migrationChecked = false;
+
+function setLoginUI(mode, msg){
+  const scr = document.getElementById('loginScreen');
+  if(mode==='app'){ scr.style.display='none'; document.body.classList.remove('locked'); return; }
+  document.body.classList.add('locked');
+  scr.style.display='flex';
+  document.getElementById('loginMsg').textContent = msg||'';
+  document.getElementById('btnLogin').style.display = (mode==='login') ? '' : 'none';
+}
+
 async function saveProjects(){
+  if(!cloudUser || !db) return false;
+  const ops = [];
+  const ids = new Set();
+  for(const p of projects){
+    ids.add(p.id);
+    const j = JSON.stringify(p);
+    if(lastSynced.get(p.id) !== j){ ops.push({t:'set', id:p.id, data:JSON.parse(j)}); lastSynced.set(p.id, j); }
+  }
+  for(const id of [...lastSynced.keys()]){
+    if(!ids.has(id)){ ops.push({t:'del', id}); lastSynced.delete(id); }
+  }
+  if(!ops.length) return true;
+  const touched = new Set(ops.map(o=>o.id));
+  remoteQueue = remoteQueue.filter(c=>!touched.has(c.id));   // 自己剛存的優先，捨棄同一筆的待套用舊變更
   try{
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
+    for(let i=0;i<ops.length;i+=400){
+      const batch = fbApi.writeBatch(db);
+      ops.slice(i,i+400).forEach(o=>{
+        const ref = fbApi.doc(db,'users',cloudUser.uid,'projects',o.id);
+        if(o.t==='set') batch.set(ref,o.data); else batch.delete(ref);
+      });
+      await batch.commit();
+    }
     return true;
   }catch(e){
-    console.error('儲存失敗', e);
-    showToast('⚠️ 資料儲存失敗（瀏覽器儲存空間可能已滿或被封鎖），建議立即用「📊 匯出 Excel」備份目前的資料。');
+    console.error('雲端儲存失敗', e);
+    ops.forEach(o=> lastSynced.set(o.id, '__retry__'));   // 讓下次儲存重新送出
+    showToast('⚠️ 雲端儲存失敗（網路中斷或權限問題），修改還在畫面上，請確認網路後再編輯一次觸發儲存。');
     return false;
   }
 }
 
-function showToast(msg){
+function applyRemote(){
+  if(!remoteQueue.length) return;
+  if(document.getElementById('detailOverlay').classList.contains('show')) return;   // 編輯中先不覆蓋，關閉視窗後再套用
+  const ae = document.activeElement;
+  if(ae && ae.isContentEditable) return;
+  for(const ch of remoteQueue){
+    if(ch.type==='removed'){
+      projects = projects.filter(p=>p.id!==ch.id);
+      lastSynced.delete(ch.id);
+    }else{
+      const np = Object.assign(blankProject(), ch.data);
+      const i = projects.findIndex(p=>p.id===np.id);
+      if(i>=0) projects[i] = np; else projects.push(np);
+      lastSynced.set(np.id, JSON.stringify(np));
+    }
+  }
+  remoteQueue = [];
+  render();
+}
+
+async function maybeMigrate(cloudCount){
+  let done = false;
+  try{ done = localStorage.getItem(MIGRATED_KEY)==='1'; }catch(e){}
+  if(done) return;
+  try{ localStorage.setItem(MIGRATED_KEY,'1'); }catch(e){}
+  if(cloudCount>0) return;
+  let raw = null;
+  try{ raw = localStorage.getItem(STORAGE_KEY); }catch(e){}
+  if(!raw) return;
+  try{
+    const local = normalizeProjects(JSON.parse(raw));
+    if(!local.length) return;
+    projects = local;
+    render();
+    await saveProjects();
+    try{ localStorage.removeItem(STORAGE_KEY); }catch(e){}
+    showToast('已把這台裝置上的 '+local.length+' 筆商案上傳到雲端。','ok');
+  }catch(e){ console.error('搬移本機資料失敗', e); }
+}
+
+function renderNicknameBox(){
+  const ta = document.getElementById('nickBox');
+  if(ta && document.activeElement!==ta){
+    ta.value = Object.entries(NICKNAME_MAP).map(([k,v])=>k+'='+v).join('\n');
+  }
+}
+
+function handleCloudError(err){
+  console.error('雲端錯誤', err);
+  if(err && err.code==='permission-denied'){
+    const mail = cloudUser && cloudUser.email ? cloudUser.email : '';
+    if(auth) fbApi.signOut(auth);
+    setLoginUI('login','這個 Google 帳號（'+mail+'）沒有存取權限，請改用你設定在資料庫規則裡的那個帳號登入。');
+  }else{
+    showToast('⚠️ 雲端連線發生問題：'+(err && err.message ? err.message : err));
+  }
+}
+
+function onUser(user){
+  if(unsubProjects){ unsubProjects(); unsubProjects=null; }
+  if(unsubSettings){ unsubSettings(); unsubSettings=null; }
+  cloudUser = user;
+  if(!user){
+    projects = []; lastSynced = new Map(); remoteQueue = []; migrationChecked = false;
+    NICKNAME_MAP = {};
+    setLoginUI('login','請用 Google 帳號登入。');
+    render();
+    return;
+  }
+  setLoginUI('app');
+  document.getElementById('accountEmail').textContent = user.email || '';
+  const uidv = user.uid;
+  unsubSettings = fbApi.onSnapshot(fbApi.doc(db,'users',uidv,'meta','settings'), snap=>{
+    NICKNAME_MAP = (snap.exists() && snap.data().nicknames) || {};
+    renderNicknameBox();
+  }, handleCloudError);
+  unsubProjects = fbApi.onSnapshot(fbApi.collection(db,'users',uidv,'projects'), snap=>{
+    snap.docChanges().forEach(ch=>{
+      if(ch.doc.metadata.hasPendingWrites) return;   // 自己剛寫的，畫面上已經有了
+      remoteQueue.push({type:ch.type, id:ch.doc.id, data:ch.doc.data()});
+    });
+    applyRemote();
+    if(!snap.metadata.fromCache && !migrationChecked){ migrationChecked = true; maybeMigrate(snap.size); }
+  }, handleCloudError);
+}
+
+async function startCloud(){
+  setLoginUI('loading','連線中…');
+  if(!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.startsWith('YOUR_')){
+    setLoginUI('config','尚未設定 Firebase：請先把 firebaseConfig 填進程式碼最上方的 FIREBASE_CONFIG。');
+    return;
+  }
+  try{
+    const base = 'https://www.gstatic.com/firebasejs/10.14.1/';
+    const [appM, authM, fsM] = await Promise.all([
+      import(base+'firebase-app.js'), import(base+'firebase-auth.js'), import(base+'firebase-firestore.js')
+    ]);
+    fbApi = {...appM, ...authM, ...fsM};
+    const app = fbApi.initializeApp(FIREBASE_CONFIG);
+    auth = fbApi.getAuth(app);
+    try{
+      db = fbApi.initializeFirestore(app, {localCache: fbApi.persistentLocalCache({tabManager: fbApi.persistentMultipleTabManager()})});
+    }catch(e){ db = fbApi.getFirestore(app); }
+    fbApi.onAuthStateChanged(auth, onUser);
+  }catch(e){
+    console.error(e);
+    setLoginUI('config','無法載入 Firebase，請檢查網路連線後重新整理。（'+(e.message||e)+'）');
+  }
+}
+
+function showToast(msg, type){
   let t = document.getElementById('toast');
   if(!t){
     t = document.createElement('div');
     t.id='toast';
-    t.style.cssText = 'position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--danger-soft); color:var(--danger); border:1px solid var(--danger); padding:12px 18px; border-radius:10px; font-size:13.5px; max-width:520px; z-index:200; box-shadow:0 8px 24px rgba(0,0,0,0.4);';
+    t.style.cssText = 'position:fixed; bottom:24px; left:50%; transform:translateX(-50%); padding:12px 18px; border-radius:10px; font-size:13.5px; max-width:520px; z-index:400; box-shadow:0 8px 24px rgba(0,0,0,0.4);';
     document.body.appendChild(t);
   }
+  const ok = type==='ok';
+  t.style.background = ok ? 'var(--cyan-soft)' : 'var(--danger-soft)';
+  t.style.color = ok ? 'var(--cyan)' : 'var(--danger)';
+  t.style.border = '1px solid ' + (ok ? 'var(--cyan)' : 'var(--danger)');
   t.textContent = msg;
   t.style.display='block';
   clearTimeout(t._hideTimer);
@@ -523,7 +729,7 @@ function openDetail(id){
   document.getElementById('detailOverlay').classList.add('show');
   bindDetailEvents(p);
 }
-function closeOverlay(id){ document.getElementById(id).classList.remove('show'); }
+function closeOverlay(id){ document.getElementById(id).classList.remove('show'); if(id==='detailOverlay') applyRemote(); }
 
 function detailHTML(p){
   return `
@@ -690,9 +896,7 @@ document.querySelectorAll('[data-close]').forEach(b=>{
   b.addEventListener('click', ()=>closeOverlay(b.dataset.close));
 });
 
-const NICKNAME_MAP = {
-  '美艷':'周映孜', '貝拉':'謝雨彤', '宜欣':'林宜欣', '岱凌':'吳岱凌', '安妮':'張安妮'
-};
+let NICKNAME_MAP = {};   // 由雲端設定載入（設定／備份 → 暱稱對照）
 function normalizeName(n){
   n = (n||'').trim();
   if(!n) return n;
@@ -988,7 +1192,82 @@ document.getElementById('clientFilter').addEventListener('change', render);
 document.getElementById('yearFilter').addEventListener('change', render);
 document.getElementById('monthFilter').addEventListener('change', render);
 
-loadProjects();
+/* ---------- Settings / backup ---------- */
+function syncMsg(msg, cls){ const el=document.getElementById('syncStatus'); el.className='status-line '+(cls||''); el.textContent=msg; }
+document.getElementById('btnSync').addEventListener('click', ()=>{
+  syncMsg(''); renderNicknameBox();
+  document.getElementById('syncOverlay').classList.add('show');
+});
+document.getElementById('btnLogin').addEventListener('click', async ()=>{
+  if(!auth) return;
+  const provider = new fbApi.GoogleAuthProvider();
+  provider.setCustomParameters({prompt:'select_account'});
+  try{ await fbApi.signInWithPopup(auth, provider); }
+  catch(e){
+    if(e.code==='auth/popup-closed-by-user' || e.code==='auth/cancelled-popup-request') return;
+    let m = '登入失敗：'+(e.message||e);
+    if(e.code==='auth/unauthorized-domain') m = '登入失敗：這個網址還沒加入 Firebase 的「授權網域」，請到 Firebase Authentication → Settings 加入。';
+    if(e.code==='auth/popup-blocked') m = '登入視窗被瀏覽器擋住了，請允許此網站的彈出視窗後再試一次。';
+    document.getElementById('loginMsg').textContent = m;
+  }
+});
+document.getElementById('btnLogout').addEventListener('click', async ()=>{
+  closeOverlay('syncOverlay');
+  if(auth) await fbApi.signOut(auth);
+});
+document.getElementById('btnSaveNick').addEventListener('click', async ()=>{
+  if(!cloudUser){ syncMsg('尚未登入。','err'); return; }
+  const map = {};
+  document.getElementById('nickBox').value.split(/\n/).forEach(line=>{
+    const m = line.trim().match(/^(.+?)\s*[=＝→:：]\s*(.+)$/);
+    if(m) map[m[1].trim()] = m[2].trim();
+  });
+  try{
+    await fbApi.setDoc(fbApi.doc(db,'users',cloudUser.uid,'meta','settings'), {nicknames:map}, {merge:true});
+    NICKNAME_MAP = map;
+    syncMsg('已儲存 '+Object.keys(map).length+' 組暱稱對照。','ok');
+  }catch(e){ syncMsg('儲存失敗：'+(e.message||e),'err'); }
+});
+document.getElementById('btnDownloadData').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(projects, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'flyingspace-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+  syncMsg('已下載備份檔。','ok');
+});
+let importArmed=false, importTimer=null;
+const IMPORT_LABEL = '📂 從備份檔匯入（會取代雲端全部商案）';
+document.getElementById('btnImportFile').addEventListener('click', (e)=>{
+  const btn = e.currentTarget;
+  if(!importArmed){
+    importArmed=true; btn.textContent='再按一次確認：匯入會取代雲端全部商案';
+    btn.style.color='var(--danger)'; btn.style.borderColor='var(--danger)';
+    importTimer=setTimeout(()=>{ importArmed=false; btn.textContent=IMPORT_LABEL; btn.style.color=''; btn.style.borderColor=''; },4000);
+    return;
+  }
+  clearTimeout(importTimer); importArmed=false; btn.textContent=IMPORT_LABEL; btn.style.color=''; btn.style.borderColor='';
+  document.getElementById('importFileInput').click();
+});
+document.getElementById('importFileInput').addEventListener('change', async (e)=>{
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    const arr = JSON.parse(await f.text());
+    if(!Array.isArray(arr)) throw new Error('檔案格式不正確');
+    projects = normalizeProjects(arr);
+    selectedIds.clear();
+    render();
+    const ok = await saveProjects();
+    syncMsg(ok ? '已匯入 '+projects.length+' 筆商案。' : '匯入的資料已顯示，但雲端儲存失敗。', ok?'ok':'err');
+  }catch(err){ syncMsg('匯入失敗：'+(err.message||err),'err'); }
+  e.target.value='';
+});
+
+document.addEventListener('focusout', ()=> setTimeout(applyRemote, 60));
+
+render();
+startCloud();
 </script>
 </body>
 </html>
