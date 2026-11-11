@@ -266,6 +266,7 @@ body.locked .wrap{display:none;}
       <button class="close" data-close="quickOverlay">×</button>
     </div>
     <div class="hint">直接貼上你原本記在備忘錄裡的商案內容（可一次貼多筆，用 ✨ 開頭分隔），會照你固定的格式（舞者：、曲目：、日期時間等）自動拆解成結構化商案卡片，不需要網路連線。解析完成後可再手動確認調整。</div>
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-size:13px; color:var(--dim);">年份 <select id="quickYear" style="background:var(--surface); border:1px solid var(--line); color:var(--text); padding:7px 10px; border-radius:7px; font-size:13px;"><option value="">自動判斷</option></select><span style="font-size:12px; color:var(--dim2);">只寫「月/日」時，會依今天日期推斷；可在這裡指定。</span></div>
     <textarea id="quickText" placeholder="✨6/13 延吉商演&#10;（需預留6/11-6/14）-提早一天去程&#10;舞者：林宜欣、吳岱凌...&#10;..."></textarea>
     <div class="status-line" id="quickStatus"></div>
     <div class="actions">
@@ -1121,6 +1122,8 @@ document.getElementById('btnNew').addEventListener('click', ()=>{
 document.getElementById('btnQuick').addEventListener('click', ()=>{
   document.getElementById('quickText').value='';
   document.getElementById('quickStatus').textContent='';
+  const qy = document.getElementById('quickYear');
+  qy.innerHTML = '<option value="">自動判斷</option>' + (()=>{ const ys=yearList(); ys.push(String(Math.max(...ys.map(Number))+1)); return ys; })().map(y=>`<option value="${y}">${y}</option>`).join('');
   document.getElementById('quickOverlay').classList.add('show');
 });
 
@@ -1128,7 +1131,20 @@ document.querySelectorAll('[data-close]').forEach(b=>{
   b.addEventListener('click', ()=>closeOverlay(b.dataset.close));
 });
 
-let PARSE_YEAR = new Date().getFullYear();   // 解析備忘錄時使用的年份
+let PARSE_YEAR = null;   // 解析備忘錄時指定的年份；null＝自動判斷
+let TODAY = ()=>new Date();
+// 備忘錄只寫「月/日」時，用今天的日期推斷年份：
+// 已經過去超過 150 天 → 視為明年；還沒到、而且超過 270 天以後 → 視為去年
+function inferYear(m, d){
+  if(PARSE_YEAR) return PARSE_YEAR;
+  const now = TODAY(); const y = now.getFullYear();
+  const nowTs = Date.UTC(y, now.getMonth(), now.getDate());
+  const cand = Date.UTC(y, m-1, d);
+  const DAY = 86400000;
+  if(nowTs - cand > 150*DAY) return y+1;
+  if(cand - nowTs > 270*DAY) return y-1;
+  return y;
+}
 let NICKNAME_MAP = {};   // 由雲端設定載入（設定／備份 → 暱稱對照）
 function normalizeName(n){
   n = (n||'').trim();
@@ -1171,11 +1187,23 @@ function parseMemoBlockLocal(text){
   } else {
     p.title = firstLine;
   }
-  const dm = p.title.match(/(\d{1,2})[\/月](\d{1,2})/);
+  const ey = p.title.match(/(20\d{2})\s*[\/\-年.]\s*/);
+  const titleNoYear = ey ? p.title.replace(ey[0],'') : p.title;
+  const dm = titleNoYear.match(/(\d{1,2})[\/月](\d{1,2})/);
   if(dm){
-    p.performDate = `${PARSE_YEAR}-${dm[1].padStart(2,'0')}-${dm[2].padStart(2,'0')}`;
+    const yy = ey ? parseInt(ey[1],10) : inferYear(parseInt(dm[1],10), parseInt(dm[2],10));
+    p.performDate = `${yy}-${dm[1].padStart(2,'0')}-${dm[2].padStart(2,'0')}`;
   }
-  let locGuess = p.title.replace(/\d{1,2}[\/月]\d{1,2}日?/g,'').trim();
+  // 排練、班機等其他日期：以演出日期的年份為準（例如 1 月的演出，12 月的排練算前一年）
+  const perfTs = p.performDate ? Date.parse(p.performDate+'T00:00:00Z') : null;
+  const baseYear = p.performDate ? parseInt(p.performDate.slice(0,4),10) : null;
+  const dateFromMD = (m,d)=>{
+    const mm=String(m).padStart(2,'0'), dd=String(d).padStart(2,'0');
+    let y = baseYear || inferYear(parseInt(m,10), parseInt(d,10));
+    if(perfTs){ const cand=Date.parse(`${y}-${mm}-${dd}T00:00:00Z`); if(cand - perfTs > 150*86400000) y -= 1; }
+    return `${y}-${mm}-${dd}`;
+  };
+  let locGuess = titleNoYear.replace(/\d{1,2}[\/月]\d{1,2}日?/g,'').trim();
   { const lm = locGuess.match(/^(.*?)\s*(?:商演|商案)/); if(lm) locGuess = lm[1].trim(); }
   if(locGuess) p.location = locGuess;
 
@@ -1248,7 +1276,7 @@ function parseMemoBlockLocal(text){
       const endStr = `${timeMatch[3].padStart(2,'0')}:${timeMatch[4]}`;
       let date='';
       const dmm = line.match(/(\d{1,2})[\/月](\d{1,2})/);
-      if(dmm){ date = `${PARSE_YEAR}-${dmm[1].padStart(2,'0')}-${dmm[2].padStart(2,'0')}`; }
+      if(dmm){ date = dateFromMD(dmm[1], dmm[2]); }
       let rest = line.replace(timeMatch[0],'');
       if(dmm) rest = rest.replace(dmm[0],'');
       rest = rest.replace(/週[一二三四五六日天]/,'').replace(/^日?/,'').trim();
@@ -1285,7 +1313,7 @@ function parseMemoBlockLocal(text){
       let personPart = flightMatch[1].trim();
       const dmm2 = personPart.match(/(\d{1,2})[\/月](\d{1,2})/);
       let date = '';
-      if(dmm2){ date = `${PARSE_YEAR}-${dmm2[1].padStart(2,'0')}-${dmm2[2].padStart(2,'0')}`; personPart = personPart.replace(dmm2[0],'').trim(); }
+      if(dmm2){ date = dateFromMD(dmm2[1], dmm2[2]); personPart = personPart.replace(dmm2[0],'').trim(); }
       personPart = personPart.replace(/^日?[:：,，]?\s*/,'').trim();
       const person = personPart.split(/[、,，]/).map(s=>normalizeName(s.trim())).filter(Boolean).join('、');
       p.flights.push({type:'去程', date, flightNo:'', from:flightMatch[2].trim(), depTime:'', to:flightMatch[3].trim(), arrTime:'', person, note:''});
@@ -1320,17 +1348,20 @@ document.getElementById('btnParse').addEventListener('click', ()=>{
   const firstStar = raw.indexOf('✨');
   const preamble = firstStar>0 ? raw.slice(0, firstStar) : '';
   const ym = preamble.match(/(20\d{2})/);
-  PARSE_YEAR = ym ? parseInt(ym[1],10) : currentYear;
+  const qySel = document.getElementById('quickYear').value;
+  PARSE_YEAR = qySel ? parseInt(qySel,10) : (ym ? parseInt(ym[1],10) : null);
 
   let blocks = raw.split(/(?=✨)/).map(b=>b.trim()).filter(b=>b.startsWith('✨'));
   if(blocks.length===0) blocks=[raw];
 
   let ok=0, fail=0, firstErr='', lastCreated=null;
+  const yearsSeen = new Set();
   blocks.forEach(block=>{
     try{
       const p = parseMemoBlockLocal(block);
       projects.push(p);
       lastCreated = p;
+      if(projYear(p)) yearsSeen.add(projYear(p));
       ok++;
     }catch(e){
       console.error(e);
@@ -1342,7 +1373,7 @@ document.getElementById('btnParse').addEventListener('click', ()=>{
   saveProjects();
   render();
   statusEl.className = fail? 'status-line err':'status-line ok';
-  statusEl.textContent = `完成：成功解析 ${ok} 筆${fail? '，失敗 '+fail+' 筆（原因：'+firstErr+'，可手動新增補上）':''}。`;
+  statusEl.textContent = `完成：成功解析 ${ok} 筆${yearsSeen.size?'（年份：'+[...yearsSeen].sort().join('、')+'）':''}${fail? '，失敗 '+fail+' 筆（原因：'+firstErr+'，可手動新增補上）':''}。`;
   if(ok>0 && fail===0){
     setTimeout(()=>{ closeOverlay('quickOverlay'); }, 900);
   }
