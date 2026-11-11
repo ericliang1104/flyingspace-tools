@@ -144,6 +144,49 @@ body.locked .wrap{display:none;}
 .login-card .sub{color:var(--dim); font-size:12px; font-family:'JetBrains Mono',monospace; letter-spacing:1px; margin-bottom:22px;}
 #loginMsg{color:var(--dim); font-size:13.5px; line-height:1.6; margin:0 0 18px; min-height:20px;}
 .set-title{font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:1.5px; text-transform:uppercase; color:var(--accent); margin:20px 0 8px; font-weight:700;}
+
+/* year tabs */
+.year-tabs{display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;}
+.year-tab{background:var(--surface); border:1px solid var(--line); color:var(--dim); padding:9px 22px; border-radius:10px; font-family:'Archivo Black',sans-serif; font-size:18px; letter-spacing:0.5px; cursor:pointer;}
+.year-tab span{font-family:'JetBrains Mono',monospace; font-size:11px; margin-left:8px; opacity:.7;}
+.year-tab.active{background:var(--accent); border-color:var(--accent); color:#1a0e08;}
+.year-tab:not(.active):hover{color:var(--text); border-color:var(--text);}
+/* lineup view */
+#lineupWrap{display:none;}
+.lu-bar{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:6px;}
+.lu-bar label{font-size:13px; color:var(--dim);}
+.lu-bar input[type=number]{width:60px; background:var(--surface); border:1px solid var(--line); color:var(--text); padding:8px; border-radius:7px; font-size:13px; margin-left:4px;}
+.lu-bar select,.lu-bar input[type=text]{background:var(--surface); border:1px solid var(--line); color:var(--text); padding:8px 10px; border-radius:7px; font-size:13px;}
+.lu-sec{font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:1px; color:var(--accent); margin:22px 0 8px; font-weight:700;}
+.lu-scroll{overflow-x:auto; border:1px solid var(--line); border-radius:12px;}
+.lu-table{border-collapse:collapse; width:100%; font-size:13px;}
+.lu-table th,.lu-table td{border:1px solid var(--line); padding:8px 10px; text-align:center; vertical-align:middle;}
+.lu-table th{background:#2E2A35; color:var(--dim); font-size:12px; min-width:110px;}
+.lu-table th.lu-name,.lu-table td.lu-name{text-align:left; min-width:96px; position:sticky; left:0; background:var(--surface); z-index:1; font-weight:700;}
+.lu-table th.lu-name{background:#2E2A35; z-index:2;}
+.lu-table td[contenteditable]{outline:none;}
+.lu-table td[contenteditable]:focus{background:var(--surface2); box-shadow:inset 0 0 0 1px var(--accent);}
+.lu-x{background:none; border:none; color:var(--dim); cursor:pointer; font-size:12px; margin-left:6px;}
+.lu-x:hover{color:var(--danger);}
+.lu-x.armed{color:var(--danger); font-weight:700;}
+.lu-cell{cursor:pointer; user-select:none; min-width:70px;}
+.lu-cell:hover{background:var(--accent-soft);}
+.av-yes{background:rgba(63,199,214,.16); color:var(--cyan); font-weight:700;}
+.av-no{background:var(--danger-soft); color:var(--danger); font-weight:700;}
+.av-maybe{background:rgba(250,204,21,.16); color:#FACC15; font-weight:700;}
+.lu-on{background:var(--accent-soft); color:var(--accent); font-weight:800;}
+.lu-warn{box-shadow:inset 0 0 0 2px var(--danger);}
+.lu-new{box-shadow:inset 0 0 0 2px #FACC15;}
+.lu-warn.lu-new{box-shadow:inset 0 0 0 2px var(--danger), inset 0 0 0 4px #FACC15;}
+.lu-num{font-family:'JetBrains Mono',monospace; color:var(--dim);}
+.lu-foot td{background:var(--surface2); font-weight:700;}
+.lu-ok{color:var(--cyan) !important;}
+.lu-bad{color:var(--danger) !important;}
+.lu-left{text-align:left !important;}
+.lu-notes{display:flex; flex-direction:column; gap:8px;}
+.lu-notes label{display:flex; gap:10px; align-items:center; font-size:13px;}
+.lu-notes label span{min-width:150px; color:var(--dim);}
+.lu-notes input{flex:1; background:var(--surface); border:1px solid var(--line); color:var(--text); padding:8px 10px; border-radius:7px; font-size:13px;}
 </style>
 </head>
 <body class="locked">
@@ -169,10 +212,13 @@ body.locked .wrap{display:none;}
     </div>
   </header>
 
+  <div class="year-tabs" id="yearTabs"></div>
+
   <div class="filters">
     <div class="view-toggle">
       <button class="active" id="viewCardsBtn">卡片檢視</button>
       <button id="viewListBtn">總覽列表</button>
+      <button id="viewLineupBtn">出場安排</button>
     </div>
     <input type="text" id="searchBox" placeholder="搜尋商案名稱、客戶、地點、舞者...">
     <select id="statusFilter">
@@ -188,7 +234,6 @@ body.locked .wrap{display:none;}
       <option value="已取消">已取消</option>
     </select>
     <select id="clientFilter"><option value="">全部客戶</option></select>
-    <select id="yearFilter"><option value="">全部年份</option></select>
     <select id="monthFilter"><option value="">全部月份</option></select>
   </div>
 
@@ -201,6 +246,7 @@ body.locked .wrap{display:none;}
   </div>
 
   <div class="grid" id="grid"></div>
+  <div id="lineupWrap"></div>
   <div class="list-wrap" id="listWrap" style="display:none;">
     <table>
       <thead><tr>
@@ -273,6 +319,7 @@ body.locked .wrap{display:none;}
     <div class="hint">選擇要匯出的內容，會產生一份 .xlsx 檔案下載到你的裝置（匯出全部商案，不受目前搜尋/篩選影響）。</div>
     <label class="checkline"><input type="checkbox" id="expSummary" checked> 總覽總表（所有商案一覽表，一列一筆）</label>
     <label class="checkline"><input type="checkbox" id="expDetail" checked> 各商演詳細資料（每個商案各一個分頁，含舞者/服裝/排練/曲目）</label>
+    <label class="checkline"><input type="checkbox" id="expLineup" checked> 出場安排（每個年份一個分頁：可跳名單、出場安排、場次換人）</label>
     <div class="status-line" id="exportStatus"></div>
     <div class="actions">
       <button class="btn btn-ghost" data-close="exportOverlay">取消</button>
@@ -303,7 +350,8 @@ function uid(){ return 'p_' + Date.now() + '_' + Math.random().toString(36).slic
 function blankProject(){
   return {
     id: uid(), title:'新商案', client:'', performDate:'', location:'', status:'籌備中', travelNote:'', costumeStyle:'',
-    leadChoreo:[], dancers:[], costumes:[], rehearsals:[], setlist:[], flights:[], advances:[]
+    leadChoreo:[], dancers:[], costumes:[], rehearsals:[], setlist:[], flights:[], advances:[],
+    scheduling:false, availability:{}, lineup:[], lineupNote:''
   };
 }
 
@@ -499,22 +547,38 @@ function statusClass(s){
 
 let currentView = 'cards';
 
+/* ---------- 年份頁籤 ---------- */
+let currentYear = (()=>{ try{ const y=parseInt(localStorage.getItem('fs-year'),10); if(y) return y; }catch(e){} return new Date().getFullYear(); })();
+function projYear(p){ return p.performDate ? p.performDate.slice(0,4) : ''; }
+function yearList(){
+  const set = new Set(['2026','2027']);
+  projects.forEach(p=>{ const y=projYear(p); if(/^\d{4}$/.test(y)) set.add(y); });
+  set.add(String(currentYear));
+  return [...set].sort();
+}
+function setYear(y){ currentYear = parseInt(y,10); try{ localStorage.setItem('fs-year', String(currentYear)); }catch(e){} }
+function renderYearTabs(){
+  const el = document.getElementById('yearTabs');
+  el.innerHTML = yearList().map(y=>{
+    const n = projects.filter(p=>projYear(p)===y).length;
+    return `<button class="year-tab ${String(currentYear)===y?'active':''}" data-year="${y}">${y}<span>${n}</span></button>`;
+  }).join('');
+}
+function inCurrentYear(p){ const y=projYear(p); return !y || y===String(currentYear); }   // 沒有日期的商案每個年份都會顯示，避免漏掉
+
 function populateFilterOptions(){
   const clientSel = document.getElementById('clientFilter');
-  const yearSel = document.getElementById('yearFilter');
   const monthSel = document.getElementById('monthFilter');
-  const curClient = clientSel.value, curYear = yearSel.value, curMonth = monthSel.value;
+  const curClient = clientSel.value, curMonth = monthSel.value;
+  const yp = projects.filter(inCurrentYear);
 
-  const clients = [...new Set(projects.map(p=>p.client).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
-  const years = [...new Set(projects.map(p=>p.performDate).filter(Boolean).map(d=>d.slice(0,4)))].sort();
-  const months = [...new Set(projects.map(p=>p.performDate).filter(Boolean).map(d=>d.slice(5,7)))].sort();
+  const clients = [...new Set(yp.map(p=>p.client).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+  const months = [...new Set(yp.map(p=>p.performDate).filter(Boolean).map(d=>d.slice(5,7)))].sort();
 
   clientSel.innerHTML = '<option value="">全部客戶</option>' + clients.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
-  yearSel.innerHTML = '<option value="">全部年份</option>' + years.map(y=>`<option value="${y}">${y}年</option>`).join('');
   monthSel.innerHTML = '<option value="">全部月份</option>' + months.map(m=>`<option value="${m}">${parseInt(m,10)}月</option>`).join('');
 
   if(clients.includes(curClient)) clientSel.value = curClient;
-  if(years.includes(curYear)) yearSel.value = curYear;
   if(months.includes(curMonth)) monthSel.value = curMonth;
 }
 
@@ -522,12 +586,11 @@ function getFilteredList(){
   const q = document.getElementById('searchBox').value.trim().toLowerCase();
   const sf = document.getElementById('statusFilter').value;
   const cf = document.getElementById('clientFilter').value;
-  const yf = document.getElementById('yearFilter').value;
   const mf = document.getElementById('monthFilter').value;
   let list = projects.filter(p=>{
+    if(!inCurrentYear(p)) return false;
     if(sf && p.status !== sf) return false;
     if(cf && p.client !== cf) return false;
-    if(yf && (!p.performDate || p.performDate.slice(0,4) !== yf)) return false;
     if(mf && (!p.performDate || p.performDate.slice(5,7) !== mf)) return false;
     if(!q) return true;
     const hay = [p.title,p.client,p.location, (p.dancers||[]).map(d=>d.performing+d.original).join(' ')].join(' ').toLowerCase();
@@ -541,10 +604,15 @@ function render(){
   const validIds = new Set(projects.map(p=>p.id));
   [...selectedIds].forEach(id=>{ if(!validIds.has(id)) selectedIds.delete(id); });
   updateBulkBar();
+  renderYearTabs();
   populateFilterOptions();
-  const list = getFilteredList();
+  const isLineup = currentView==='lineup';
   document.getElementById('grid').style.display = currentView==='cards' ? 'grid' : 'none';
   document.getElementById('listWrap').style.display = currentView==='list' ? 'block' : 'none';
+  document.getElementById('lineupWrap').style.display = isLineup ? 'block' : 'none';
+  ['searchBox','statusFilter','clientFilter','monthFilter'].forEach(id=>{ document.getElementById(id).style.display = isLineup ? 'none' : ''; });
+  if(isLineup){ document.getElementById('bulkBar').style.display='none'; renderLineup(); return; }
+  const list = getFilteredList();
   if(currentView==='cards') renderCards(list); else renderList(list);
 }
 
@@ -706,18 +774,182 @@ document.getElementById('selectAllList').addEventListener('change', (e)=>{
   updateBulkBar();
 });
 
-document.getElementById('viewCardsBtn').addEventListener('click', ()=>{
-  currentView='cards';
-  document.getElementById('viewCardsBtn').classList.add('active');
-  document.getElementById('viewListBtn').classList.remove('active');
-  render();
+/* ---------- 出場安排 ---------- */
+const AV_CYCLE = ['', '可', '不行', '待確認'];
+const AV_CLASS = {'可':'av-yes','不行':'av-no','待確認':'av-maybe'};
+let lineupSize = 6;
+try{ lineupSize = parseInt(localStorage.getItem('fs-lineup-size'),10) || 6; }catch(e){}
+
+function scheduledProjects(){
+  const yr = String(currentYear);
+  return projects.filter(p=>p.scheduling && projYear(p)===yr).sort((a,b)=>a.performDate.localeCompare(b.performDate));
+}
+function lineupPeople(sp){
+  const seen = new Set(), names = [];
+  sp.forEach(p=>{
+    Object.keys(p.availability||{}).forEach(n=>{ if(!seen.has(n)){ seen.add(n); names.push(n); } });
+    (p.lineup||[]).forEach(n=>{ if(!seen.has(n)){ seen.add(n); names.push(n); } });
+  });
+  return names;
+}
+function dayDiff(a,b){
+  const pa=a.split('-').map(Number), pb=b.split('-').map(Number);
+  return Math.round((Date.UTC(pb[0],pb[1]-1,pb[2])-Date.UTC(pa[0],pa[1]-1,pa[2]))/86400000);
+}
+
+function renderLineup(){
+  const wrap = document.getElementById('lineupWrap');
+  const sp = scheduledProjects();
+  const yr = String(currentYear);
+  const candidates = projects.filter(p=>!p.scheduling && projYear(p)===yr).sort((a,b)=>a.performDate.localeCompare(b.performDate));
+  let h = `<div class="lu-bar">
+    <label>每場人數 <input type="number" id="luSize" min="1" max="30" value="${lineupSize}"></label>
+    <select id="luAddShow"><option value="">＋ 加入商案…</option>${candidates.map(p=>`<option value="${p.id}">${esc(p.title)}</option>`).join('')}</select>
+    <input type="text" id="luNewPerson" placeholder="新增人員（含代理）">
+    <button class="btn" id="luAddPerson">＋ 新增人員</button>
+  </div>`;
+  if(!sp.length){
+    h += `<div class="empty"><b>${yr} 年還沒有排入出場安排的商案</b>貼備忘錄時有「可：」「不行：」的商案會自動排入，或用上方「＋ 加入商案」手動加入（商案需要有演出日期）。</div>`;
+    wrap.innerHTML = h; return;
+  }
+  const people = lineupPeople(sp);
+  const canOf = (p,n)=> (p.availability||{})[n]||'';
+  const onOf = (p,n)=> (p.lineup||[]).includes(n);
+  const head = extra => `<th class="lu-name">人員</th>` + sp.map(p=>`<th>${esc(p.title||'未命名')}${extra(p)}</th>`).join('');
+
+  let t1 = `<table class="lu-table"><thead><tr>${head(p=>`<button class="lu-x" data-rmshow="${p.id}" title="移出出場安排">✕</button>`)}<th style="min-width:80px;">可跳場次</th><th style="min-width:60px;"></th></tr></thead><tbody>`;
+  people.forEach(n=>{
+    const cells = sp.map(p=>{ const st=canOf(p,n); return `<td class="lu-cell ${AV_CLASS[st]||''}" data-av="1" data-pid="${p.id}" data-name="${esc(n)}">${esc(st)}</td>`; }).join('');
+    const can = sp.filter(p=>canOf(p,n)==='可').length;
+    t1 += `<tr><td class="lu-name" contenteditable="true" data-rename="${esc(n)}">${esc(n)}</td>${cells}<td class="lu-num">${can}</td><td><button class="lu-x" data-rmperson="${esc(n)}" title="從今年所有場次移除這個人">✕</button></td></tr>`;
+  });
+  t1 += `<tr class="lu-foot"><td class="lu-name">可跳人數</td>${sp.map(p=>`<td class="lu-num">${people.filter(n=>canOf(p,n)==='可').length}</td>`).join('')}<td></td><td></td></tr></tbody></table>`;
+
+  let t2 = `<table class="lu-table"><thead><tr>${head(()=>'')}<th style="min-width:80px;">上場次數</th></tr></thead><tbody>`;
+  people.forEach(n=>{
+    let cnt = 0;
+    const cells = sp.map((p,k)=>{
+      const on = onOf(p,n); if(on) cnt++;
+      const warn = on && canOf(p,n)!=='可';
+      const isNew = on && k>0 && !onOf(sp[k-1],n);
+      const cls = 'lu-cell'+(on?' lu-on':'')+(warn?' lu-warn':'')+(isNew?' lu-new':'');
+      return `<td class="${cls}" data-lu="1" data-pid="${p.id}" data-name="${esc(n)}" title="${warn?'這場不在「可」名單內':''}">${on?'上':''}</td>`;
+    }).join('');
+    t2 += `<tr><td class="lu-name">${esc(n)}</td>${cells}<td class="lu-num">${cnt}</td></tr>`;
+  });
+  t2 += `<tr class="lu-foot"><td class="lu-name">每場人數</td>${sp.map(p=>{ const c=(p.lineup||[]).length; return `<td class="lu-num ${c===lineupSize?'lu-ok':'lu-bad'}">${c}/${lineupSize}</td>`; }).join('')}<td></td></tr></tbody></table>`;
+
+  let t3 = `<table class="lu-table"><thead><tr><th>前一場</th><th>後一場</th><th style="min-width:80px;">間隔(天)</th><th style="min-width:80px;">換入人數</th><th class="lu-left" style="min-width:200px;">換入名單</th></tr></thead><tbody>`;
+  let sum14 = 0, sumAll = 0;
+  for(let k=1;k<sp.length;k++){
+    const a=sp[k-1], b=sp[k];
+    const gap = dayDiff(a.performDate,b.performDate);
+    const incoming = (b.lineup||[]).filter(n=>!(a.lineup||[]).includes(n));
+    sumAll += incoming.length; if(gap<=14) sum14 += incoming.length;
+    t3 += `<tr><td>${esc(a.title)}</td><td>${esc(b.title)}</td><td class="lu-num">${gap}</td><td class="lu-num">${incoming.length}</td><td class="lu-left">${esc(incoming.join('、'))}</td></tr>`;
+  }
+  t3 += `<tr class="lu-foot"><td colspan="3">14 天內的銜接，換入人數合計</td><td class="lu-num">${sum14}</td><td class="lu-left">全部銜接合計：${sumAll}</td></tr></tbody></table>`;
+
+  const t4 = `<div class="lu-notes">` + sp.map(p=>`<label><span>${esc(p.title||'未命名')}</span><input type="text" data-note="${p.id}" value="${esc(p.lineupNote||'')}" placeholder="頂替對應、需確認事項…"></label>`).join('') + `</div>`;
+
+  h += `<div class="lu-sec">可跳名單（點格子切換：可 → 不行 → 待確認 → 空白；點人名可改名）</div><div class="lu-scroll">${t1}</div>
+  <div class="lu-sec">出場安排（點格子切換「上」；黃框＝相對前一場新換入；紅框＝這場不在「可」名單內）</div><div class="lu-scroll">${t2}</div>
+  <div class="lu-sec">場次換人</div><div class="lu-scroll">${t3}</div>
+  <div class="lu-sec">各場備註（頂替對應等）</div>${t4}`;
+  wrap.innerHTML = h;
+}
+
+(function bindLineup(){
+  const wrap = document.getElementById('lineupWrap');
+  const commit = ()=>{ saveProjects(); renderLineup(); };
+  const byId = id => projects.find(x=>x.id===id);
+  function addPerson(){
+    const inp = document.getElementById('luNewPerson');
+    const n = (inp.value||'').trim();
+    if(!n) return;
+    if(n.startsWith('__')){ showToast('名稱不能以兩個底線開頭'); return; }
+    const sp = scheduledProjects();
+    if(!sp.length){ showToast('請先加入至少一場商案，才能新增人員'); return; }
+    sp.forEach(p=>{ p.availability = p.availability||{}; if(!(n in p.availability)) p.availability[n] = ''; });
+    commit();
+  }
+  wrap.addEventListener('click', e=>{
+    const av = e.target.closest('[data-av]');
+    if(av){
+      const p = byId(av.dataset.pid); if(!p) return;
+      p.availability = p.availability||{};
+      const cur = p.availability[av.dataset.name]||'';
+      p.availability[av.dataset.name] = AV_CYCLE[(AV_CYCLE.indexOf(cur)+1)%AV_CYCLE.length];
+      commit(); return;
+    }
+    const lu = e.target.closest('[data-lu]');
+    if(lu){
+      const p = byId(lu.dataset.pid); if(!p) return;
+      p.lineup = p.lineup||[];
+      const i = p.lineup.indexOf(lu.dataset.name);
+      if(i>=0) p.lineup.splice(i,1); else p.lineup.push(lu.dataset.name);
+      commit(); return;
+    }
+    const rs = e.target.closest('[data-rmshow]');
+    if(rs){ const p = byId(rs.dataset.rmshow); if(p){ p.scheduling = false; commit(); } return; }
+    const rp = e.target.closest('[data-rmperson]');
+    if(rp){
+      if(rp.dataset.armed!=='1'){
+        rp.dataset.armed='1'; rp.textContent='確定移除?'; rp.classList.add('armed');
+        setTimeout(()=>{ if(rp.isConnected){ rp.dataset.armed=''; rp.textContent='✕'; rp.classList.remove('armed'); } }, 3000);
+        return;
+      }
+      const name = rp.dataset.rmperson;
+      scheduledProjects().forEach(p=>{ if(p.availability) delete p.availability[name]; p.lineup = (p.lineup||[]).filter(x=>x!==name); });
+      commit(); return;
+    }
+    if(e.target.id==='luAddPerson') addPerson();
+  });
+  wrap.addEventListener('keydown', e=>{
+    if(e.key==='Enter' && e.target.id==='luNewPerson'){ e.preventDefault(); addPerson(); }
+    if(e.key==='Enter' && e.target.dataset && e.target.dataset.rename!==undefined){ e.preventDefault(); e.target.blur(); }
+  });
+  wrap.addEventListener('change', e=>{
+    const t = e.target;
+    if(t.id==='luSize'){
+      lineupSize = Math.max(1, parseInt(t.value,10)||6);
+      try{ localStorage.setItem('fs-lineup-size', String(lineupSize)); }catch(_){}
+      renderLineup(); return;
+    }
+    if(t.id==='luAddShow' && t.value){ const p = byId(t.value); if(p){ p.scheduling = true; commit(); } return; }
+    if(t.dataset && t.dataset.note){ const p = byId(t.dataset.note); if(p){ p.lineupNote = t.value; saveProjects(); } }
+  });
+  wrap.addEventListener('focusout', e=>{
+    const t = e.target.closest ? e.target.closest('[data-rename]') : null;
+    if(!t) return;
+    const old = t.dataset.rename, nn = (t.textContent||'').trim();
+    if(!nn || nn===old || nn.startsWith('__')){ t.textContent = old; return; }
+    scheduledProjects().forEach(p=>{
+      const av = p.availability||{};
+      if(old in av){ if(!(nn in av) || av[nn]==='') av[nn] = av[old]; delete av[old]; }
+      p.availability = av;
+      p.lineup = [...new Set((p.lineup||[]).map(x=>x===old?nn:x))];
+    });
+    commit();
+  });
+})();
+
+document.getElementById('yearTabs').addEventListener('click', e=>{
+  const b = e.target.closest('[data-year]'); if(!b) return;
+  setYear(b.dataset.year); render();
 });
-document.getElementById('viewListBtn').addEventListener('click', ()=>{
-  currentView='list';
-  document.getElementById('viewListBtn').classList.add('active');
-  document.getElementById('viewCardsBtn').classList.remove('active');
+
+function setView(v){
+  currentView = v;
+  document.getElementById('viewCardsBtn').classList.toggle('active', v==='cards');
+  document.getElementById('viewListBtn').classList.toggle('active', v==='list');
+  document.getElementById('viewLineupBtn').classList.toggle('active', v==='lineup');
   render();
-});
+}
+document.getElementById('viewLineupBtn').addEventListener('click', ()=> setView('lineup'));
+
+document.getElementById('viewCardsBtn').addEventListener('click', ()=> setView('cards'));
+document.getElementById('viewListBtn').addEventListener('click', ()=> setView('list'));
 
 function esc(s){ return (s||'').toString().replace(/[&<>"]/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m])); }
 
@@ -896,6 +1128,7 @@ document.querySelectorAll('[data-close]').forEach(b=>{
   b.addEventListener('click', ()=>closeOverlay(b.dataset.close));
 });
 
+let PARSE_YEAR = new Date().getFullYear();   // 解析備忘錄時使用的年份
 let NICKNAME_MAP = {};   // 由雲端設定載入（設定／備份 → 暱稱對照）
 function normalizeName(n){
   n = (n||'').trim();
@@ -940,10 +1173,10 @@ function parseMemoBlockLocal(text){
   }
   const dm = p.title.match(/(\d{1,2})[\/月](\d{1,2})/);
   if(dm){
-    p.performDate = `2026-${dm[1].padStart(2,'0')}-${dm[2].padStart(2,'0')}`;
+    p.performDate = `${PARSE_YEAR}-${dm[1].padStart(2,'0')}-${dm[2].padStart(2,'0')}`;
   }
   let locGuess = p.title.replace(/\d{1,2}[\/月]\d{1,2}日?/g,'').trim();
-  locGuess = locGuess.replace(/(商演|商案)\s*$/,'').trim();
+  { const lm = locGuess.match(/^(.*?)\s*(?:商演|商案)/); if(lm) locGuess = lm[1].trim(); }
   if(locGuess) p.location = locGuess;
 
   let idx = 1;
@@ -959,6 +1192,7 @@ function parseMemoBlockLocal(text){
 
     if(/^舞者[:：]/.test(line)){
       p.dancers = splitDancerList(line.replace(/^舞者[:：]/,''));
+      p.lineup = [...new Set(p.dancers.map(d=>d.performing).filter(Boolean))];
       mode = null;
       continue;
     }
@@ -1014,7 +1248,7 @@ function parseMemoBlockLocal(text){
       const endStr = `${timeMatch[3].padStart(2,'0')}:${timeMatch[4]}`;
       let date='';
       const dmm = line.match(/(\d{1,2})[\/月](\d{1,2})/);
-      if(dmm){ date = `2026-${dmm[1].padStart(2,'0')}-${dmm[2].padStart(2,'0')}`; }
+      if(dmm){ date = `${PARSE_YEAR}-${dmm[1].padStart(2,'0')}-${dmm[2].padStart(2,'0')}`; }
       let rest = line.replace(timeMatch[0],'');
       if(dmm) rest = rest.replace(dmm[0],'');
       rest = rest.replace(/週[一二三四五六日天]/,'').replace(/^日?/,'').trim();
@@ -1051,18 +1285,26 @@ function parseMemoBlockLocal(text){
       let personPart = flightMatch[1].trim();
       const dmm2 = personPart.match(/(\d{1,2})[\/月](\d{1,2})/);
       let date = '';
-      if(dmm2){ date = `2026-${dmm2[1].padStart(2,'0')}-${dmm2[2].padStart(2,'0')}`; personPart = personPart.replace(dmm2[0],'').trim(); }
+      if(dmm2){ date = `${PARSE_YEAR}-${dmm2[1].padStart(2,'0')}-${dmm2[2].padStart(2,'0')}`; personPart = personPart.replace(dmm2[0],'').trim(); }
       personPart = personPart.replace(/^日?[:：,，]?\s*/,'').trim();
       const person = personPart.split(/[、,，]/).map(s=>normalizeName(s.trim())).filter(Boolean).join('、');
       p.flights.push({type:'去程', date, flightNo:'', from:flightMatch[2].trim(), depTime:'', to:flightMatch[3].trim(), arrTime:'', person, note:''});
       continue;
     }
-    const unavailMatch = line.match(/^不行[:：]\s*(.+)$/);
-    if(unavailMatch){
-      const names = unavailMatch[1].split(/[、,，]/).map(s=>normalizeName(s.trim())).filter(Boolean).join('、');
-      p.travelNote = p.travelNote ? (p.travelNote + '｜不行：' + names) : ('不行：' + names);
+    const avMatch = line.match(/^(可|不行|待確認)[:：]\s*(.*)$/);
+    if(avMatch){
+      p.scheduling = true;
+      avMatch[2].split(/[、,，\s]+/).map(x=>normalizeName(x.trim())).filter(Boolean).forEach(n=>{ p.availability[n] = avMatch[1]; });
       continue;
     }
+    const luMatch = line.match(/^(?:上場|出場|上)[:：]\s*(.*)$/);
+    if(luMatch){
+      p.scheduling = true;
+      p.lineup = [...new Set(luMatch[1].split(/[、,，\s]+/).map(x=>normalizeName(x.trim())).filter(Boolean))];
+      continue;
+    }
+    const subMatch = line.match(/^頂替[:：]\s*(.*)$/);
+    if(subMatch){ p.lineupNote = subMatch[1].trim(); continue; }
     // 無法歸類的行，附加在行程備註後面，避免資料遺失
     p.travelNote = p.travelNote ? (p.travelNote + '｜' + line) : line;
   }
@@ -1075,14 +1317,20 @@ document.getElementById('btnParse').addEventListener('click', ()=>{
   const statusEl = document.getElementById('quickStatus');
   if(!raw){ statusEl.className='status-line err'; statusEl.textContent='請先貼上備忘錄內容。'; return; }
 
-  let blocks = raw.split(/(?=✨)/).map(b=>b.trim()).filter(Boolean);
+  const firstStar = raw.indexOf('✨');
+  const preamble = firstStar>0 ? raw.slice(0, firstStar) : '';
+  const ym = preamble.match(/(20\d{2})/);
+  PARSE_YEAR = ym ? parseInt(ym[1],10) : currentYear;
+
+  let blocks = raw.split(/(?=✨)/).map(b=>b.trim()).filter(b=>b.startsWith('✨'));
   if(blocks.length===0) blocks=[raw];
 
-  let ok=0, fail=0, firstErr='';
+  let ok=0, fail=0, firstErr='', lastCreated=null;
   blocks.forEach(block=>{
     try{
       const p = parseMemoBlockLocal(block);
       projects.push(p);
+      lastCreated = p;
       ok++;
     }catch(e){
       console.error(e);
@@ -1090,6 +1338,7 @@ document.getElementById('btnParse').addEventListener('click', ()=>{
       fail++;
     }
   });
+  if(lastCreated && /^\d{4}$/.test(projYear(lastCreated))) setYear(projYear(lastCreated));
   saveProjects();
   render();
   statusEl.className = fail? 'status-line err':'status-line ok';
@@ -1111,6 +1360,33 @@ function sanitizeSheetName(name, used){
   }
   used.add(finalName);
   return finalName;
+}
+
+function buildLineupSheet(year){
+  const sp = projects.filter(p=>p.scheduling && projYear(p)===year).sort((a,b)=>a.performDate.localeCompare(b.performDate));
+  const people = lineupPeople(sp);
+  const can = (p,n)=> (p.availability||{})[n]||'';
+  const on = (p,n)=> (p.lineup||[]).includes(n);
+  const aoa = [];
+  aoa.push([year+' 出場安排（每場 '+lineupSize+' 人）']);
+  aoa.push([]);
+  aoa.push(['可跳名單', ...sp.map(p=>p.title), '可跳場次']);
+  people.forEach(n=>aoa.push([n, ...sp.map(p=>can(p,n)), sp.filter(p=>can(p,n)==='可').length]));
+  aoa.push(['可跳人數', ...sp.map(p=>people.filter(n=>can(p,n)==='可').length)]);
+  aoa.push([]);
+  aoa.push(['出場安排', ...sp.map(p=>p.title), '上場次數']);
+  people.forEach(n=>aoa.push([n, ...sp.map(p=>on(p,n)?'上':''), sp.filter(p=>on(p,n)).length]));
+  aoa.push(['每場人數', ...sp.map(p=>(p.lineup||[]).length)]);
+  aoa.push([]);
+  aoa.push(['場次換人（前一場）','後一場','間隔天數','換入人數','換入名單']);
+  for(let k=1;k<sp.length;k++){
+    const inc = (sp[k].lineup||[]).filter(n=>!(sp[k-1].lineup||[]).includes(n));
+    aoa.push([sp[k-1].title, sp[k].title, dayDiff(sp[k-1].performDate, sp[k].performDate), inc.length, inc.join('、')]);
+  }
+  aoa.push([]);
+  aoa.push(['各場備註']);
+  sp.forEach(p=>aoa.push([p.title, p.lineupNote||'']));
+  return XLSX.utils.aoa_to_sheet(aoa);
 }
 
 function buildSummarySheet(list){
@@ -1153,7 +1429,8 @@ document.getElementById('btnDoExport').addEventListener('click', ()=>{
   const statusEl = document.getElementById('exportStatus');
   const wantSummary = document.getElementById('expSummary').checked;
   const wantDetail = document.getElementById('expDetail').checked;
-  if(!wantSummary && !wantDetail){
+  const wantLineup = document.getElementById('expLineup').checked;
+  if(!wantSummary && !wantDetail && !wantLineup){
     statusEl.className='status-line err'; statusEl.textContent='請至少選擇一種內容。'; return;
   }
   if(typeof XLSX === 'undefined'){
@@ -1176,6 +1453,13 @@ document.getElementById('btnDoExport').addEventListener('click', ()=>{
         XLSX.utils.book_append_sheet(wb, buildDetailSheet(p), name);
       });
     }
+    if(wantLineup){
+      const years = [...new Set(projects.filter(p=>p.scheduling && /^\d{4}$/.test(projYear(p))).map(projYear))].sort();
+      years.forEach(y=>{ XLSX.utils.book_append_sheet(wb, buildLineupSheet(y), sanitizeSheetName(y+'出場安排', used)); });
+    }
+    if(wb.SheetNames.length===0){
+      statusEl.className='status-line err'; statusEl.textContent='沒有可匯出的內容（目前沒有排入出場安排的商案）。'; return;
+    }
     const today = new Date().toISOString().slice(0,10);
     XLSX.writeFile(wb, `Flyingspace商案匯出_${today}.xlsx`);
     statusEl.className='status-line ok'; statusEl.textContent='匯出完成，請查看下載的檔案。';
@@ -1189,7 +1473,6 @@ document.getElementById('btnDoExport').addEventListener('click', ()=>{
 document.getElementById('searchBox').addEventListener('input', render);
 document.getElementById('statusFilter').addEventListener('change', render);
 document.getElementById('clientFilter').addEventListener('change', render);
-document.getElementById('yearFilter').addEventListener('change', render);
 document.getElementById('monthFilter').addEventListener('change', render);
 
 /* ---------- Settings / backup ---------- */
